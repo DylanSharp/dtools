@@ -300,7 +300,9 @@ list_worktrees() {
     echo ""
 
     local found=0
-    git -C "$REPO_ROOT" worktree list | while read -r line; do
+
+    # Use process substitution to avoid subshell (so 'found' persists)
+    while read -r line; do
         local path=$(echo "$line" | awk '{print $1}')
         local branch=$(echo "$line" | awk '{print $3}' | tr -d '[]')
 
@@ -328,7 +330,7 @@ list_worktrees() {
             echo "    Path: $path"
             echo ""
         fi
-    done
+    done < <(git -C "$REPO_ROOT" worktree list)
 
     if [ "$found" -eq 0 ]; then
         echo -e "  ${YELLOW}No worktrees created yet.${NC}"
