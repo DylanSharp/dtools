@@ -116,6 +116,14 @@ create_worktree() {
         exit 1
     fi
 
+    # Check if branch is currently checked out
+    local current_branch=$(git -C "$REPO_ROOT" branch --show-current)
+    if [ "$current_branch" = "$branch" ]; then
+        echo -e "${RED}Error: '$branch' is currently checked out in the main repo${NC}"
+        echo "Switch to a different branch first, or create a worktree for a different branch."
+        exit 1
+    fi
+
     # Check if branch exists locally or remotely
     if ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
         if git -C "$REPO_ROOT" show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
