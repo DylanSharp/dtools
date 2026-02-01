@@ -23,7 +23,7 @@ dist/
 Thumbs.db
 
 # Old bash script (now replaced by Go)
-worktree-dev
+/worktree-dev
 
 # Git worktrees with isolated Docker environments
 .worktrees

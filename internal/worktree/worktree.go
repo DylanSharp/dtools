@@ -36,11 +36,62 @@ func NewRepo() (*Repo, error) {
 		return nil, fmt.Errorf("not inside a git repository")
 	}
 
+	// Check if we're in a worktree - if so, get the main repo root
+	mainRoot := root
+	if strings.Contains(root, ".worktrees") {
+		// We're inside a worktree, find the main repo
+		parts := strings.Split(root, ".worktrees")
+		if len(parts) > 0 {
+			mainRoot = strings.TrimSuffix(parts[0], string(filepath.Separator))
+		}
+	}
+
 	return &Repo{
-		Root:         root,
-		Name:         filepath.Base(root),
-		WorktreesDir: filepath.Join(root, ".worktrees"),
+		Root:         mainRoot,
+		Name:         filepath.Base(mainRoot),
+		WorktreesDir: filepath.Join(mainRoot, ".worktrees"),
 	}, nil
+}
+
+// CurrentWorktree returns the branch name if we're inside a worktree, empty string otherwise
+func (r *Repo) CurrentWorktree() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+
+	// Check if current directory is inside .worktrees
+	if !strings.Contains(cwd, r.WorktreesDir) {
+		return ""
+	}
+
+	// Get the worktree name from the path
+	rel, err := filepath.Rel(r.WorktreesDir, cwd)
+	if err != nil {
+		return ""
+	}
+
+	// Get just the first component (the worktree directory name)
+	parts := strings.Split(rel, string(filepath.Separator))
+	if len(parts) == 0 || parts[0] == ".." {
+		return ""
+	}
+
+	worktreeName := parts[0]
+
+	// Find the branch name for this worktree
+	worktrees, err := r.getWorktrees()
+	if err != nil {
+		return ""
+	}
+
+	for _, wt := range worktrees {
+		if filepath.Base(wt.Path) == worktreeName {
+			return wt.Branch
+		}
+	}
+
+	return ""
 }
 
 // CreateWorktree creates a new worktree for the given branch
@@ -195,6 +246,15 @@ func (r *Repo) RemoveWorktree(branch string) error {
 
 	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
 		return fmt.Errorf("worktree not found at %s", worktreePath)
+	}
+
+	// Check if we're currently inside this worktree
+	cwd, _ := os.Getwd()
+	insideWorktree := strings.HasPrefix(cwd, worktreePath)
+
+	if insideWorktree {
+		// Signal to shell wrapper to cd out first
+		fmt.Println("WORKTREE_CD_OUT:" + r.Root)
 	}
 
 	fmt.Println(warnStyle.Render("Removing worktree:"), branch)
