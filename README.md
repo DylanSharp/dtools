@@ -4,21 +4,36 @@ Git worktree manager with isolated Docker environments. Run multiple branches si
 
 ## Installation
 
+### Requirements
+- Go 1.21+
+- Git
+- Docker & docker-compose
+
+### Build from source
+
 ```bash
-# Clone the repo
-git clone https://github.com/yourusername/worktree-dev.git ~/source/worktree-dev
+# Clone and build
+git clone https://github.com/dylan/worktree-dev
+cd worktree-dev
 
-# Add to PATH (add to your ~/.zshrc or ~/.bashrc)
-export PATH="$HOME/source/worktree-dev:$PATH"
+# Install dependencies and build
+make deps
+make install
+```
 
-# Or symlink to a directory already in PATH
-ln -s ~/source/worktree-dev/worktree-dev /usr/local/bin/worktree-dev
+This installs `worktree-dev` to `~/.local/bin`. Make sure this is in your PATH:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ## Usage
 
 ```bash
-# Create a worktree for a branch
+# Interactive mode - choose between new or existing branch
+worktree-dev create
+
+# Create worktree for a specific branch
 worktree-dev create feature/new-api
 
 # List all worktrees
@@ -55,7 +70,7 @@ services:
       - "${DB_PORT:-5432}:5432"
 ```
 
-The script auto-detects these patterns and assigns unique ports per worktree.
+The tool auto-detects these patterns and assigns unique ports per worktree.
 
 ## Worktree Commands
 
@@ -76,6 +91,34 @@ cd .worktrees/feature-new-api
 - **COMPOSE_PROJECT_NAME**: Docker prefixes all resources with this, so `myapp-feature_web` won't conflict with `myapp-hotfix_web`
 - **Port offsets**: Each branch gets a deterministic offset (1-99) based on its name hash
 - **Separate volumes**: Each project gets its own named volumes (fresh database)
+
+## Shell integration (optional)
+
+Add to your `.zshrc` or `.bashrc` to auto-cd into created worktrees:
+
+```bash
+wt() {
+    local output
+    output=$(worktree-dev "$@")
+    echo "$output"
+
+    # Extract worktree path if present
+    local path=$(echo "$output" | grep "^WORKTREE_PATH:" | cut -d: -f2)
+    if [ -n "$path" ] && [ -d "$path" ]; then
+        cd "$path"
+    fi
+}
+```
+
+Then use `wt create feature/foo` to create and cd in one command.
+
+## Development
+
+```bash
+make build    # Build binary to ./bin/
+make test     # Run tests
+make clean    # Remove build artifacts
+```
 
 ## License
 

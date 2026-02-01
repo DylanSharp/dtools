@@ -1,0 +1,29 @@
+# Build output
+bin/
+dist/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Old bash script (now replaced by Go)
+worktree-dev
+
+# Git worktrees with isolated Docker environments
+.worktrees
