@@ -286,12 +286,13 @@ DEVSCRIPT
         echo -e "${YELLOW}Ports allocated (offset +$offset):${NC}"
         echo -e "$port_display"
     fi
-    echo -e "${YELLOW}Quick start:${NC}"
-    echo "  cd $worktree_path"
+    echo -e "${YELLOW}Commands:${NC}"
     echo "  ./dev up              # Start services"
     echo "  ./dev logs            # View logs"
     echo "  ./dev down            # Stop services"
     echo ""
+    # Machine-readable path for shell wrapper to parse
+    echo "WORKTREE_PATH:$worktree_path"
 }
 
 list_worktrees() {
