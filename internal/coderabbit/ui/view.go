@@ -45,6 +45,7 @@ func RenderView(m *Model) string {
 		viewState.TotalFound = m.review.TotalFoundCount
 		viewState.AlreadyAddressed = m.review.AlreadyAddressed
 		viewState.NewComments = m.review.NewCommentsCount
+		viewState.CIFailureCount = len(m.review.CIFailures)
 	}
 
 	content := renderThoughts(m.thoughts, m.width, viewportHeight, m.scrollOffset, viewState)
@@ -95,30 +96,52 @@ type ThoughtViewState struct {
 	TotalFound       int
 	AlreadyAddressed int
 	NewComments      int
+	CIFailureCount   int
 }
 
 // renderThoughts renders the scrollable thoughts area
 func renderThoughts(thoughts []domain.ThoughtChunk, width, height, scrollOffset int, state ThoughtViewState) string {
 	if len(thoughts) == 0 {
 		var message string
-		if state.Satisfied && state.TotalFound == 0 {
+		if state.Satisfied && state.TotalFound == 0 && state.CIFailureCount == 0 {
 			if state.WatchMode {
 				message = "✓ No CodeRabbit comments found\n\nWaiting for new comments..."
 			} else {
 				message = "✓ No CodeRabbit comments found - PR looks good!"
 			}
-		} else if state.Complete && state.NewComments == 0 && state.AlreadyAddressed > 0 {
+		} else if state.Satisfied && state.CIFailureCount > 0 {
+			// CodeRabbit is satisfied but CI is failing
+			if state.WatchMode {
+				message = fmt.Sprintf("✓ CodeRabbit satisfied\n✗ %d CI check(s) failing\n\nWaiting for CI to pass...", state.CIFailureCount)
+			} else {
+				message = fmt.Sprintf("✓ CodeRabbit satisfied\n✗ %d CI check(s) failing - fix required", state.CIFailureCount)
+			}
+		} else if state.Complete && state.NewComments == 0 && state.AlreadyAddressed > 0 && state.CIFailureCount == 0 {
 			if state.WatchMode {
 				message = fmt.Sprintf("✓ All %d comments already addressed\n\nWaiting for new comments...", state.AlreadyAddressed)
 			} else {
 				message = fmt.Sprintf("✓ All %d comments already addressed in previous runs", state.AlreadyAddressed)
 			}
-		} else if state.Streaming && state.NewComments > 0 {
-			message = fmt.Sprintf("Found %d comments, passing to Claude...", state.NewComments)
+		} else if state.Complete && state.NewComments == 0 && state.CIFailureCount > 0 {
+			// No new comments but CI is failing
+			if state.AlreadyAddressed > 0 {
+				message = fmt.Sprintf("✓ All %d comments addressed\n✗ %d CI check(s) failing - fix required", state.AlreadyAddressed, state.CIFailureCount)
+			} else {
+				message = fmt.Sprintf("✓ No CodeRabbit comments\n✗ %d CI check(s) failing - fix required", state.CIFailureCount)
+			}
+		} else if state.Streaming && (state.NewComments > 0 || state.CIFailureCount > 0) {
+			var parts []string
+			if state.NewComments > 0 {
+				parts = append(parts, fmt.Sprintf("%d comments", state.NewComments))
+			}
+			if state.CIFailureCount > 0 {
+				parts = append(parts, fmt.Sprintf("%d CI failures", state.CIFailureCount))
+			}
+			message = fmt.Sprintf("Found %s, passing to Claude...", strings.Join(parts, " and "))
 		} else if state.Streaming {
 			message = "Waiting for Claude's response..."
 		} else if state.Fetching {
-			message = "Checking for CodeRabbit comments..."
+			message = "Checking for CodeRabbit comments and CI status..."
 		} else if state.Complete {
 			if state.WatchMode {
 				message = "✓ Review complete\n\nWaiting for new comments..."

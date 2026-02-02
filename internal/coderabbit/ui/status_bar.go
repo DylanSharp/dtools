@@ -30,6 +30,9 @@ type StatusBar struct {
 	TotalFound       int
 	AlreadyAddressed int
 	NewComments      int
+
+	// CI failure tracking
+	CIFailureCount int
 }
 
 // NewStatusBar creates a new status bar with default values
@@ -77,6 +80,13 @@ func (s StatusBar) Render(width int) string {
 		}
 		progressSection := StatusBarSectionStyle.Render(commentInfo)
 		sections = append(sections, progressSection)
+	}
+
+	// CI failure info
+	if s.CIFailureCount > 0 {
+		ciInfo := fmt.Sprintf("CI: %d failed", s.CIFailureCount)
+		ciSection := StatusBarErrorStyle.Render(ciInfo)
+		sections = append(sections, ciSection)
 	}
 
 	// Current file
@@ -143,6 +153,9 @@ func (s StatusBar) renderStatus() string {
 			remaining := formatDuration(s.CooldownRemaining)
 			return StatusBarWarningStyle.Render(fmt.Sprintf("◑ Cooldown %s", remaining))
 		case service.WatchStateSatisfied:
+			if s.CIFailureCount > 0 {
+				return StatusBarWarningStyle.Render("◐ CI Failing")
+			}
 			return StatusBarProgressStyle.Render("✓ Satisfied")
 		case service.WatchStateError:
 			return StatusBarErrorStyle.Render("● Error")
@@ -158,8 +171,14 @@ func (s StatusBar) renderStatus() string {
 	case domain.ReviewStatusReviewing:
 		return StatusBarProgressStyle.Render("● Reviewing")
 	case domain.ReviewStatusCompleted:
+		if s.CIFailureCount > 0 {
+			return StatusBarWarningStyle.Render("◐ CI Failing")
+		}
 		return StatusBarProgressStyle.Render("✓ Complete")
 	case domain.ReviewStatusSatisfied:
+		if s.CIFailureCount > 0 {
+			return StatusBarWarningStyle.Render("◐ CI Failing")
+		}
 		return StatusBarProgressStyle.Render("✓ Satisfied")
 	case domain.ReviewStatusFailed:
 		return StatusBarErrorStyle.Render("✗ Failed")
@@ -187,6 +206,9 @@ func (s *StatusBar) Update(review *domain.Review) {
 	s.TotalFound = review.TotalFoundCount
 	s.AlreadyAddressed = review.AlreadyAddressed
 	s.NewComments = review.NewCommentsCount
+
+	// CI failure tracking
+	s.CIFailureCount = len(review.CIFailures)
 }
 
 // SetWatchState updates the watch mode state

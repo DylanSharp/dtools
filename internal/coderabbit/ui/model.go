@@ -451,43 +451,83 @@ func (m *Model) IsComplete() bool {
 		m.review.Status == domain.ReviewStatusSatisfied
 }
 
-// buildCommentSummary creates initial thoughts showing the comments being addressed
+// buildCommentSummary creates initial thoughts showing the comments and CI failures being addressed
 func (m *Model) buildCommentSummary(review *domain.Review) []domain.ThoughtChunk {
-	if review == nil || len(review.Comments) == 0 {
+	if review == nil || (len(review.Comments) == 0 && len(review.CIFailures) == 0) {
 		return []domain.ThoughtChunk{}
 	}
 
 	now := time.Now()
-	thoughts := []domain.ThoughtChunk{
-		{
+	var thoughts []domain.ThoughtChunk
+
+	// Show CodeRabbit comments if any
+	if len(review.Comments) > 0 {
+		thoughts = append(thoughts, domain.ThoughtChunk{
 			Timestamp: now,
 			Content:   fmt.Sprintf("─── CodeRabbit Comments (%d) ───", len(review.Comments)),
 			Type:      domain.ThoughtTypeHeader,
-		},
-	}
-
-	for i, comment := range review.Comments {
-		// Build location string
-		location := comment.Location()
-
-		// Format: [1] path/to/file.go:42
-		header := fmt.Sprintf("[%d] %s", i+1, location)
-		thoughts = append(thoughts, domain.ThoughtChunk{
-			Timestamp: now,
-			Content:   header,
-			Type:      domain.ThoughtTypeComment,
-			File:      comment.FilePath,
 		})
 
-		// Show full comment body (word wrapped by renderer)
-		body := comment.EffectiveBody()
-		if body != "" {
+		for i, comment := range review.Comments {
+			// Build location string
+			location := comment.Location()
+
+			// Format: [1] path/to/file.go:42
+			header := fmt.Sprintf("[%d] %s", i+1, location)
 			thoughts = append(thoughts, domain.ThoughtChunk{
 				Timestamp: now,
-				Content:   body,
+				Content:   header,
 				Type:      domain.ThoughtTypeComment,
 				File:      comment.FilePath,
 			})
+
+			// Show full comment body (word wrapped by renderer)
+			body := comment.EffectiveBody()
+			if body != "" {
+				thoughts = append(thoughts, domain.ThoughtChunk{
+					Timestamp: now,
+					Content:   body,
+					Type:      domain.ThoughtTypeComment,
+					File:      comment.FilePath,
+				})
+			}
+		}
+	}
+
+	// Show CI failures if any
+	if len(review.CIFailures) > 0 {
+		thoughts = append(thoughts, domain.ThoughtChunk{
+			Timestamp: now,
+			Content:   fmt.Sprintf("─── CI Failures (%d) ───", len(review.CIFailures)),
+			Type:      domain.ThoughtTypeHeader,
+		})
+
+		for i, failure := range review.CIFailures {
+			// Format: [1] Check Name (App Name)
+			header := fmt.Sprintf("[%d] %s", i+1, failure.CheckName)
+			if failure.AppName != "" && failure.AppName != failure.CheckName {
+				header = fmt.Sprintf("[%d] %s (%s)", i+1, failure.CheckName, failure.AppName)
+			}
+			thoughts = append(thoughts, domain.ThoughtChunk{
+				Timestamp: now,
+				Content:   header,
+				Type:      domain.ThoughtTypeComment,
+			})
+
+			// Show summary or URL
+			if failure.Summary != "" {
+				thoughts = append(thoughts, domain.ThoughtChunk{
+					Timestamp: now,
+					Content:   failure.Summary,
+					Type:      domain.ThoughtTypeComment,
+				})
+			} else if failure.LogURL != "" {
+				thoughts = append(thoughts, domain.ThoughtChunk{
+					Timestamp: now,
+					Content:   fmt.Sprintf("Log: %s", failure.LogURL),
+					Type:      domain.ThoughtTypeComment,
+				})
+			}
 		}
 	}
 
