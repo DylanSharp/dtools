@@ -1,12 +1,13 @@
-.PHONY: build install clean test build-review install-review
+.PHONY: build install clean test build-review install-review build-ralph install-ralph
 
 BINARY_NAME=worktree-dev
 REVIEW_BINARY=review
+RALPH_BINARY=ralph
 BUILD_DIR=bin
 INSTALL_DIR=$(HOME)/.local/bin
 
 # Build all binaries
-build: build-worktree build-review
+build: build-worktree build-review build-ralph
 
 # Build worktree-dev binary
 build-worktree:
@@ -20,12 +21,19 @@ build-review:
 	@mkdir -p $(BUILD_DIR)
 	go build -o $(BUILD_DIR)/$(REVIEW_BINARY) ./cmd/review
 
+# Build ralph binary
+build-ralph:
+	@echo "Building $(RALPH_BINARY)..."
+	@mkdir -p $(BUILD_DIR)
+	go build -o $(BUILD_DIR)/$(RALPH_BINARY) ./cmd/ralph
+
 # Install all to ~/.local/bin
 install: build
 	@echo "Installing to $(INSTALL_DIR)..."
 	@mkdir -p $(INSTALL_DIR)
 	cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
 	cp $(BUILD_DIR)/$(REVIEW_BINARY) $(INSTALL_DIR)/$(REVIEW_BINARY)
+	cp $(BUILD_DIR)/$(RALPH_BINARY) $(INSTALL_DIR)/$(RALPH_BINARY)
 	@echo "Done! Make sure $(INSTALL_DIR) is in your PATH"
 
 # Install just review binary
@@ -33,6 +41,13 @@ install-review: build-review
 	@echo "Installing $(REVIEW_BINARY) to $(INSTALL_DIR)..."
 	@mkdir -p $(INSTALL_DIR)
 	cp $(BUILD_DIR)/$(REVIEW_BINARY) $(INSTALL_DIR)/$(REVIEW_BINARY)
+	@echo "Done!"
+
+# Install just ralph binary
+install-ralph: build-ralph
+	@echo "Installing $(RALPH_BINARY) to $(INSTALL_DIR)..."
+	@mkdir -p $(INSTALL_DIR)
+	cp $(BUILD_DIR)/$(RALPH_BINARY) $(INSTALL_DIR)/$(RALPH_BINARY)
 	@echo "Done!"
 
 # Install dependencies
