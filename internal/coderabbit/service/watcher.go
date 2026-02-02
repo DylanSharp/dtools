@@ -48,16 +48,18 @@ const (
 
 // Watcher monitors a PR for changes and triggers reviews
 type Watcher struct {
-	service          *ReviewService
-	detector         *SatisfactionDetector
-	opts             WatchOptions
-	mu               sync.Mutex
-	state            WatchState
-	lastCommitSHA    string
-	lastCommentCount int
-	cooldownUntil    time.Time
-	batchWaitUntil   time.Time
-	review           *domain.Review
+	service            *ReviewService
+	detector           *SatisfactionDetector
+	opts               WatchOptions
+	mu                 sync.Mutex
+	state              WatchState
+	lastCommitSHA      string
+	lastCommentCount   int
+	lastCIFailureCount int  // Track CI failures to detect new ones
+	processedCIOnce    bool // Have we processed CI failures for this commit?
+	cooldownUntil      time.Time
+	batchWaitUntil     time.Time
+	review             *domain.Review
 }
 
 // NewWatcher creates a new watcher
@@ -180,9 +182,18 @@ func (w *Watcher) checkForChanges(ctx context.Context, prNumber int, events chan
 		}
 	}
 
+	// Check for new CI failures
+	newCIFailures := len(review.CIFailures) > w.lastCIFailureCount
+
+	// Reset CI processing flag on new commit
+	if newCommit {
+		w.processedCIOnce = false
+	}
+
 	// Update tracking state
 	w.lastCommitSHA = review.HeadCommit
 	w.lastCommentCount = len(review.Comments)
+	w.lastCIFailureCount = len(review.CIFailures)
 
 	// Determine if we need to process
 	needsProcessing := false
@@ -191,12 +202,25 @@ func (w *Watcher) checkForChanges(ctx context.Context, prNumber int, events chan
 	if newComments {
 		needsProcessing = true
 		eventType = WatchEventNewComments
-	} else if newCommit && len(review.CIFailures) > 0 {
+	} else if len(review.Comments) > 0 {
+		// Existing comments that need addressing
+		needsProcessing = true
+		eventType = WatchEventNewComments
+	} else if len(review.CIFailures) > 0 && (!w.processedCIOnce || newCIFailures) {
+		// CI failures: process if we haven't yet for this commit, or if there are new failures
 		needsProcessing = true
 		eventType = WatchEventNewCIFailures
+		w.processedCIOnce = true
 	}
 
 	if !needsProcessing {
+		// Nothing to do - send a polling event so UI knows we're still checking
+		events <- WatchEvent{
+			Type:      WatchEventPolling,
+			Review:    review,
+			Timestamp: time.Now(),
+			Message:   "Checking for updates...",
+		}
 		return
 	}
 
