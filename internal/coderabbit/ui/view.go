@@ -33,7 +33,21 @@ func RenderView(m *Model) string {
 		viewportHeight = minViewportHeight
 	}
 
-	content := renderThoughts(m.thoughts, m.width, viewportHeight, m.scrollOffset, m.streaming, m.satisfied)
+	// Build view state
+	viewState := ThoughtViewState{
+		Streaming: m.streaming,
+		Fetching:  m.fetching,
+		Complete:  m.complete,
+		Satisfied: m.satisfied,
+		WatchMode: m.watchMode,
+	}
+	if m.review != nil {
+		viewState.TotalFound = m.review.TotalFoundCount
+		viewState.AlreadyAddressed = m.review.AlreadyAddressed
+		viewState.NewComments = m.review.NewCommentsCount
+	}
+
+	content := renderThoughts(m.thoughts, m.width, viewportHeight, m.scrollOffset, viewState)
 	sections = append(sections, content)
 
 	// Help line
@@ -71,16 +85,48 @@ func renderHeader(m *Model) string {
 	return header
 }
 
+// ThoughtViewState holds the state needed for rendering thoughts
+type ThoughtViewState struct {
+	Streaming        bool
+	Fetching         bool
+	Complete         bool
+	Satisfied        bool
+	WatchMode        bool
+	TotalFound       int
+	AlreadyAddressed int
+	NewComments      int
+}
+
 // renderThoughts renders the scrollable thoughts area
-func renderThoughts(thoughts []domain.ThoughtChunk, width, height, scrollOffset int, streaming, satisfied bool) string {
+func renderThoughts(thoughts []domain.ThoughtChunk, width, height, scrollOffset int, state ThoughtViewState) string {
 	if len(thoughts) == 0 {
 		var message string
-		if satisfied {
-			message = "✓ No outstanding comments - CodeRabbit is satisfied!"
-		} else if streaming {
+		if state.Satisfied && state.TotalFound == 0 {
+			if state.WatchMode {
+				message = "✓ No CodeRabbit comments found\n\nWaiting for new comments..."
+			} else {
+				message = "✓ No CodeRabbit comments found - PR looks good!"
+			}
+		} else if state.Complete && state.NewComments == 0 && state.AlreadyAddressed > 0 {
+			if state.WatchMode {
+				message = fmt.Sprintf("✓ All %d comments already addressed\n\nWaiting for new comments...", state.AlreadyAddressed)
+			} else {
+				message = fmt.Sprintf("✓ All %d comments already addressed in previous runs", state.AlreadyAddressed)
+			}
+		} else if state.Streaming && state.NewComments > 0 {
+			message = fmt.Sprintf("Found %d comments, passing to Claude...", state.NewComments)
+		} else if state.Streaming {
 			message = "Waiting for Claude's response..."
+		} else if state.Fetching {
+			message = "Checking for CodeRabbit comments..."
+		} else if state.Complete {
+			if state.WatchMode {
+				message = "✓ Review complete\n\nWaiting for new comments..."
+			} else {
+				message = "✓ Review complete"
+			}
 		} else {
-			message = "Fetching CodeRabbit review..."
+			message = "Initializing..."
 		}
 		placeholder := DimStyle.Render(message)
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, placeholder)
@@ -124,6 +170,21 @@ func renderThoughts(thoughts []domain.ThoughtChunk, width, height, scrollOffset 
 
 // renderThought renders a single thought chunk
 func renderThought(thought domain.ThoughtChunk, maxWidth int) string {
+	// Handle header type specially (no bullet, dimmed)
+	if thought.Type == domain.ThoughtTypeHeader {
+		return DimStyle.Render(thought.Content)
+	}
+
+	// Handle comment type (CodeRabbit comments being shown)
+	if thought.Type == domain.ThoughtTypeComment {
+		// Word wrap if too long
+		content := thought.Content
+		if len(content) > maxWidth-2 {
+			content = wordWrap(content, maxWidth-2)
+		}
+		return CommentStyle.Render(content)
+	}
+
 	// Choose style based on thought type
 	var style lipgloss.Style
 	var bullet string

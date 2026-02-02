@@ -132,23 +132,22 @@ func (p *ClaudeStreamParser) isCode(line string) bool {
 		return false
 	}
 
-	// Very long lines are likely code
-	if len(line) > 500 {
+	// Very long lines are likely code (but raise threshold to show more)
+	if len(line) > 800 {
 		return true
 	}
 
-	// Check against code patterns
-	for _, pattern := range p.codePatterns {
-		if pattern.MatchString(line) {
-			return true
-		}
-	}
-
-	// Lines that look like JSON objects
-	if strings.HasPrefix(line, "{") && strings.HasSuffix(line, "}") {
+	// Only filter out very obvious code patterns, not natural language
+	// File content with line numbers (N→) - this is definitely file output
+	if regexp.MustCompile(`^\s*\d+→`).MatchString(line) {
 		return true
 	}
-	if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+
+	// Lines that look like pure JSON objects (API responses etc)
+	if strings.HasPrefix(line, "{") && strings.HasSuffix(line, "}") && len(line) > 100 {
+		return true
+	}
+	if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") && len(line) > 100 {
 		return true
 	}
 

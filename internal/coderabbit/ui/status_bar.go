@@ -20,9 +20,16 @@ type StatusBar struct {
 	CurrentFile       string
 	Status            domain.ReviewStatus
 	WatchState        service.WatchState
-	CooldownRemaining time.Duration
+	CooldownRemaining   time.Duration
+	BatchWaitRemaining  time.Duration
 	StartTime         time.Time
+	LastChecked       time.Time
 	Error             error
+
+	// Enhanced comment tracking
+	TotalFound       int
+	AlreadyAddressed int
+	NewComments      int
 }
 
 // NewStatusBar creates a new status bar with default values
@@ -53,10 +60,22 @@ func (s StatusBar) Render(width int) string {
 		sections = append(sections, prSection)
 	}
 
-	// Comments progress
-	if s.CommentsTotal > 0 {
-		progress := fmt.Sprintf("%d/%d", s.CommentsProcessed, s.CommentsTotal)
-		progressSection := StatusBarSectionStyle.Render("Comments: " + progress)
+	// Comments info - show found/new/addressed breakdown
+	if s.TotalFound > 0 || s.NewComments > 0 {
+		var commentInfo string
+		if s.NewComments > 0 && s.Status == domain.ReviewStatusReviewing {
+			// Actively processing - can't track per-comment progress, just show count
+			commentInfo = fmt.Sprintf("Addressing %d comments", s.NewComments)
+		} else if s.NewComments > 0 {
+			// Completed with new comments
+			commentInfo = fmt.Sprintf("Addressed: %d", s.NewComments)
+		} else if s.AlreadyAddressed > 0 {
+			// All comments were already addressed
+			commentInfo = fmt.Sprintf("Found: %d (all addressed)", s.TotalFound)
+		} else {
+			commentInfo = fmt.Sprintf("Found: %d", s.TotalFound)
+		}
+		progressSection := StatusBarSectionStyle.Render(commentInfo)
 		sections = append(sections, progressSection)
 	}
 
@@ -75,11 +94,19 @@ func (s StatusBar) Render(width int) string {
 	statusSection := s.renderStatus()
 	sections = append(sections, statusSection)
 
-	// Elapsed time
-	elapsed := time.Since(s.StartTime)
-	elapsedStr := formatDuration(elapsed)
-	elapsedSection := DimStyle.Render(elapsedStr)
-	sections = append(sections, elapsedSection)
+	// Timing info
+	if !s.LastChecked.IsZero() {
+		ago := time.Since(s.LastChecked).Round(time.Second)
+		if ago < time.Minute {
+			sections = append(sections, DimStyle.Render(fmt.Sprintf("checked %ds ago", int(ago.Seconds()))))
+		} else {
+			sections = append(sections, DimStyle.Render(fmt.Sprintf("checked %s ago", formatDuration(ago))))
+		}
+	} else {
+		elapsed := time.Since(s.StartTime)
+		elapsedStr := formatDuration(elapsed)
+		sections = append(sections, DimStyle.Render(elapsedStr))
+	}
 
 	// Join sections with dividers
 	divider := StatusBarDividerStyle.Render(" │ ")
@@ -108,7 +135,8 @@ func (s StatusBar) renderStatus() string {
 		case service.WatchStatePolling:
 			return StatusBarSectionStyle.Render("◌ Polling...")
 		case service.WatchStateBatchWait:
-			return StatusBarWarningStyle.Render("◐ Batching...")
+			remaining := formatDuration(s.BatchWaitRemaining)
+			return StatusBarWarningStyle.Render(fmt.Sprintf("◐ Batching %s", remaining))
 		case service.WatchStateProcessing:
 			return StatusBarProgressStyle.Render("● Processing")
 		case service.WatchStateCooldown:
@@ -126,7 +154,7 @@ func (s StatusBar) renderStatus() string {
 	case domain.ReviewStatusPending:
 		return StatusBarSectionStyle.Render("○ Pending")
 	case domain.ReviewStatusFetching:
-		return StatusBarSectionStyle.Render("◌ Fetching...")
+		return StatusBarSectionStyle.Render("◌ Checking...")
 	case domain.ReviewStatusReviewing:
 		return StatusBarProgressStyle.Render("● Reviewing")
 	case domain.ReviewStatusCompleted:
@@ -153,12 +181,19 @@ func (s *StatusBar) Update(review *domain.Review) {
 	s.CommentsProcessed = review.ProcessedCount
 	s.CurrentFile = review.CurrentFile
 	s.Status = review.Status
+	s.LastChecked = time.Now()
+
+	// Enhanced tracking
+	s.TotalFound = review.TotalFoundCount
+	s.AlreadyAddressed = review.AlreadyAddressed
+	s.NewComments = review.NewCommentsCount
 }
 
 // SetWatchState updates the watch mode state
-func (s *StatusBar) SetWatchState(state service.WatchState, cooldownRemaining time.Duration) {
+func (s *StatusBar) SetWatchState(state service.WatchState, cooldownRemaining, batchWaitRemaining time.Duration) {
 	s.WatchState = state
 	s.CooldownRemaining = cooldownRemaining
+	s.BatchWaitRemaining = batchWaitRemaining
 }
 
 // SetError sets the error state

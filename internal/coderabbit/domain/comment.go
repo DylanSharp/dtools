@@ -86,6 +86,8 @@ const (
 	ThoughtTypeAnalysis    ThoughtType = "analysis"
 	ThoughtTypeCode        ThoughtType = "code"
 	ThoughtTypeProgress    ThoughtType = "progress"
+	ThoughtTypeComment     ThoughtType = "comment"  // CodeRabbit comment being addressed
+	ThoughtTypeHeader      ThoughtType = "header"   // Section header
 )
 
 // IsDisplayable returns true if this thought should be shown in the TUI

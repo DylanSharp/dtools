@@ -56,6 +56,7 @@ type Watcher struct {
 	lastCommitSHA    string
 	lastCommentCount int
 	cooldownUntil    time.Time
+	batchWaitUntil   time.Time
 	review           *domain.Review
 }
 
@@ -198,6 +199,43 @@ func (w *Watcher) checkForChanges(ctx context.Context, prNumber int, events chan
 		return
 	}
 
+	// Batch wait - let more comments roll in before processing
+	if w.opts.BatchWaitDuration > 0 {
+		w.mu.Lock()
+		w.state = WatchStateBatchWait
+		w.batchWaitUntil = time.Now().Add(w.opts.BatchWaitDuration)
+		w.mu.Unlock()
+
+		events <- WatchEvent{
+			Type:      WatchEventPolling,
+			Review:    review,
+			Timestamp: time.Now(),
+			Message:   "Waiting for more comments to arrive...",
+		}
+
+		// Wait for batch duration
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(w.opts.BatchWaitDuration):
+		}
+
+		// Re-fetch to get any new comments that came in during batch wait
+		review, err = w.service.FetchReviewData(ctx, config)
+		if err != nil {
+			events <- WatchEvent{
+				Type:      WatchEventError,
+				Error:     err,
+				Timestamp: time.Now(),
+				Message:   "Failed to fetch review data after batch wait",
+			}
+			return
+		}
+
+		// Update tracking with new count
+		w.lastCommentCount = len(review.Comments)
+	}
+
 	// Start processing (thread-safe)
 	w.mu.Lock()
 	w.state = WatchStateProcessing
@@ -296,6 +334,20 @@ func (w *Watcher) GetCooldownRemaining() time.Duration {
 		return 0
 	}
 	remaining := time.Until(w.cooldownUntil)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
+// GetBatchWaitRemaining returns the time remaining in batch wait
+func (w *Watcher) GetBatchWaitRemaining() time.Duration {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.state != WatchStateBatchWait {
+		return 0
+	}
+	remaining := time.Until(w.batchWaitUntil)
 	if remaining < 0 {
 		return 0
 	}

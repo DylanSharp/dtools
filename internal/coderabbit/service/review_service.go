@@ -102,10 +102,15 @@ func (s *ReviewService) StartReview(ctx context.Context, config ReviewConfig) (*
 	// Filter comments based on config (nits, outdated, etc.)
 	filteredComments := s.filterComments(comments, config)
 
+	// Track total found for UI display
+	review.TotalFoundCount = len(filteredComments)
+
 	// Filter out already processed comments using state
 	unprocessedComments := state.FilterUnprocessed(trackerState, filteredComments)
 	review.Comments = unprocessedComments
 	review.RemainingCount = len(unprocessedComments)
+	review.NewCommentsCount = len(unprocessedComments)
+	review.AlreadyAddressed = review.TotalFoundCount - review.NewCommentsCount
 
 	// Fetch CI failures
 	ciFailures, err := s.ci.GetTestFailures(ctx, owner, repo, pr.HeadCommit)
@@ -233,8 +238,11 @@ func (s *ReviewService) FetchReviewData(ctx context.Context, config ReviewConfig
 
 	// Filter by config then by state
 	filteredComments := s.filterComments(comments, config)
+	review.TotalFoundCount = len(filteredComments)
 	review.Comments = state.FilterUnprocessed(trackerState, filteredComments)
 	review.RemainingCount = len(review.Comments)
+	review.NewCommentsCount = len(review.Comments)
+	review.AlreadyAddressed = review.TotalFoundCount - review.NewCommentsCount
 
 	// Fetch CI failures
 	ciFailures, err := s.ci.GetTestFailures(ctx, owner, repo, pr.HeadCommit)
@@ -313,6 +321,7 @@ func (s *ReviewService) parseRepository(repository string) (owner, repo string) 
 type WatchOptions struct {
 	PollInterval         time.Duration
 	CooldownDuration     time.Duration
+	BatchWaitDuration    time.Duration // Wait for more comments before processing
 	RequireManualConfirm bool
 	IncludeNits          bool
 	IncludeOutdated      bool
@@ -323,6 +332,7 @@ func DefaultWatchOptions() WatchOptions {
 	return WatchOptions{
 		PollInterval:         15 * time.Second,
 		CooldownDuration:     3 * time.Minute,
+		BatchWaitDuration:    30 * time.Second, // Wait for CodeRabbit to finish posting
 		RequireManualConfirm: true,
 		IncludeNits:          true,
 		IncludeOutdated:      true,

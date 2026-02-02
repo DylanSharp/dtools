@@ -17,20 +17,13 @@ import (
 )
 
 //go:embed templates/*
-var templateFS embed.FS
+var ralphTemplateFS embed.FS
 
 var (
-	prdFile string
+	ralphPRDFile string
 )
 
-func main() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-var rootCmd = &cobra.Command{
+var ralphCmd = &cobra.Command{
 	Use:   "ralph",
 	Short: "PRD-based Claude agent loop",
 	Long: `Ralph executes user stories from a Product Requirements Document (PRD)
@@ -38,22 +31,22 @@ using Claude as the AI agent. Stories are executed sequentially, respecting
 dependencies between them.
 
 Example workflow:
-  1. ralph init          # Create a new PRD file
-  2. Edit prd.md         # Define your stories
-  3. ralph run           # Execute stories with Claude`,
+  1. dtools ralph init     # Create a new PRD file
+  2. Edit prd.md           # Define your stories
+  3. dtools ralph run      # Execute stories with Claude`,
 }
 
-var initCmd = &cobra.Command{
+var ralphInitCmd = &cobra.Command{
 	Use:   "init [name]",
 	Short: "Initialize a new ralph project",
 	Long: `Create a new PRD file from template.
 
 If no name is provided, uses the current directory name.`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: runInit,
+	RunE: runRalphInit,
 }
 
-var statusCmd = &cobra.Command{
+var ralphStatusCmd = &cobra.Command{
 	Use:   "status [prd-file]",
 	Short: "Show project status",
 	Long: `Display the current status of a ralph project, including:
@@ -61,10 +54,10 @@ var statusCmd = &cobra.Command{
 - Story status (pending, blocked, completed, failed)
 - Dependency information`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: runStatus,
+	RunE: runRalphStatus,
 }
 
-var runCmd = &cobra.Command{
+var ralphRunCmd = &cobra.Command{
 	Use:   "run [prd-file]",
 	Short: "Execute project stories",
 	Long: `Run the ralph agent loop to execute stories from a PRD file.
@@ -72,29 +65,30 @@ var runCmd = &cobra.Command{
 Stories are executed sequentially in dependency order. Claude is used
 to implement each story, and progress is displayed in a terminal UI.`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: runProject,
+	RunE: runRalphProject,
 }
 
-var listCmd = &cobra.Command{
+var ralphListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all ralph projects",
 	Long:  `List all ralph projects that have been initialized.`,
-	RunE:  runList,
+	RunE:  runRalphList,
 }
 
 func init() {
-	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(runCmd)
-	rootCmd.AddCommand(listCmd)
+	ralphCmd.AddCommand(ralphInitCmd)
+	ralphCmd.AddCommand(ralphStatusCmd)
+	ralphCmd.AddCommand(ralphRunCmd)
+	ralphCmd.AddCommand(ralphListCmd)
+	rootCmd.AddCommand(ralphCmd)
 
 	// Flags
-	runCmd.Flags().StringVarP(&prdFile, "prd", "p", "prd.md", "Path to PRD file")
-	statusCmd.Flags().StringVarP(&prdFile, "prd", "p", "prd.md", "Path to PRD file")
+	ralphRunCmd.Flags().StringVarP(&ralphPRDFile, "prd", "p", "prd.md", "Path to PRD file")
+	ralphStatusCmd.Flags().StringVarP(&ralphPRDFile, "prd", "p", "prd.md", "Path to PRD file")
 }
 
-// runInit initializes a new ralph project
-func runInit(cmd *cobra.Command, args []string) error {
+// runRalphInit initializes a new ralph project
+func runRalphInit(cmd *cobra.Command, args []string) error {
 	// Determine project name
 	name := ""
 	if len(args) > 0 {
@@ -114,7 +108,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load template
-	template, err := templateFS.ReadFile("templates/prd_template.md")
+	template, err := ralphTemplateFS.ReadFile("templates/prd_template.md")
 	if err != nil {
 		return fmt.Errorf("could not load template: %w", err)
 	}
@@ -127,25 +121,25 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not write prd.md: %w", err)
 	}
 
-	fmt.Printf("✓ Initialized ralph project: %s\n", name)
+	fmt.Printf("Initialized ralph project: %s\n", name)
 	fmt.Printf("  Created: %s\n\n", prdPath)
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Edit prd.md to define your stories")
-	fmt.Println("  2. Run 'ralph run' to start implementing")
+	fmt.Println("  2. Run 'dtools ralph run' to start implementing")
 
 	return nil
 }
 
-// runStatus shows project status
-func runStatus(cmd *cobra.Command, args []string) error {
+// runRalphStatus shows project status
+func runRalphStatus(cmd *cobra.Command, args []string) error {
 	// Get PRD path
-	prdPath := prdFile
+	prdPath := ralphPRDFile
 	if len(args) > 0 {
 		prdPath = args[0]
 	}
 
 	// Create service
-	svc, err := createService()
+	svc, err := createRalphService()
 	if err != nil {
 		return err
 	}
@@ -170,16 +164,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runProject executes the project
-func runProject(cmd *cobra.Command, args []string) error {
+// runRalphProject executes the project
+func runRalphProject(cmd *cobra.Command, args []string) error {
 	// Get PRD path
-	prdPath := prdFile
+	prdPath := ralphPRDFile
 	if len(args) > 0 {
 		prdPath = args[0]
 	}
 
 	// Create service
-	svc, err := createService()
+	svc, err := createRalphService()
 	if err != nil {
 		return err
 	}
@@ -203,7 +197,7 @@ func runProject(cmd *cobra.Command, args []string) error {
 
 	// Check if already complete
 	if project.IsComplete() {
-		fmt.Println("✓ All stories already complete!")
+		fmt.Println("All stories already complete!")
 		return nil
 	}
 
@@ -222,9 +216,9 @@ func runProject(cmd *cobra.Command, args []string) error {
 			fmt.Printf("\nProject: %s\n", project.Name)
 			fmt.Printf("Completed: %d/%d stories\n", project.CompletedStories(), project.TotalStories())
 			if project.IsComplete() {
-				fmt.Println("✓ All stories complete!")
+				fmt.Println("All stories complete!")
 			} else if project.HasFailures() {
-				fmt.Printf("✗ %d stories failed\n", project.FailedStories())
+				fmt.Printf("%d stories failed\n", project.FailedStories())
 			}
 		}
 	}
@@ -232,8 +226,8 @@ func runProject(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runList lists all projects
-func runList(cmd *cobra.Command, args []string) error {
+// runRalphList lists all projects
+func runRalphList(cmd *cobra.Command, args []string) error {
 	// Create repository
 	repo, err := adapters.NewJSONRepository()
 	if err != nil {
@@ -247,7 +241,7 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	if len(projects) == 0 {
 		fmt.Println("No projects found.")
-		fmt.Println("Run 'ralph init' to create a new project.")
+		fmt.Println("Run 'dtools ralph init' to create a new project.")
 		return nil
 	}
 
@@ -256,13 +250,13 @@ func runList(cmd *cobra.Command, args []string) error {
 		status := string(p.Status)
 		switch p.Status {
 		case "completed":
-			status = "✓ " + status
+			status = "completed"
 		case "failed":
-			status = "✗ " + status
+			status = "failed"
 		case "running":
-			status = "▶ " + status
+			status = "running"
 		default:
-			status = "○ " + status
+			status = "pending"
 		}
 
 		fmt.Printf("  %s\n", p.Name)
@@ -274,8 +268,8 @@ func runList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// createService creates the project service with all dependencies
-func createService() (*service.ProjectService, error) {
+// createRalphService creates the project service with all dependencies
+func createRalphService() (*service.ProjectService, error) {
 	// Create adapters
 	parser := adapters.NewMarkdownPRDParser(ports.DefaultPRDParseOptions())
 	executor := adapters.NewClaudeExecutor()

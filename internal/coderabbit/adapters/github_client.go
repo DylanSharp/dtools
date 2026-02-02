@@ -96,88 +96,106 @@ func (c *GitHubCLIClient) GetPullRequest(ctx context.Context, owner, repo string
 	}, nil
 }
 
-// ListCodeRabbitComments fetches all CodeRabbit review comments for a PR
+// ListCodeRabbitComments fetches all CodeRabbit review comments for a PR using GraphQL
+// This includes the thread's isResolved status which is not available via REST API
 func (c *GitHubCLIClient) ListCodeRabbitComments(ctx context.Context, owner, repo string, number int) ([]domain.Comment, error) {
-	// First, get all reviews for the PR
-	reviewsArgs := []string{
-		"api",
-		fmt.Sprintf("repos/%s/%s/pulls/%d/reviews", owner, repo, number),
-		"--paginate",
-	}
+	// Use GraphQL to fetch review threads with resolved status
+	query := fmt.Sprintf(`
+	{
+		repository(owner: "%s", name: "%s") {
+			pullRequest(number: %d) {
+				reviewThreads(first: 100) {
+					nodes {
+						id
+						isResolved
+						isOutdated
+						comments(first: 10) {
+							nodes {
+								databaseId
+								body
+								path
+								line: originalLine
+								createdAt
+								updatedAt
+								url
+								author {
+									login
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}`, owner, repo, number)
 
-	reviewsOut, err := c.runGH(ctx, reviewsArgs...)
+	args := []string{"api", "graphql", "-f", fmt.Sprintf("query=%s", query)}
+	out, err := c.runGH(ctx, args...)
 	if err != nil {
-		return nil, domain.ErrGitHubAPI("failed to fetch reviews", err)
+		return nil, domain.ErrGitHubAPI("failed to fetch review threads", err)
 	}
 
-	var reviews []ghReview
-	if err := json.Unmarshal(reviewsOut, &reviews); err != nil {
-		return nil, domain.ErrJSONParse("failed to parse reviews", err)
+	var response struct {
+		Data struct {
+			Repository struct {
+				PullRequest struct {
+					ReviewThreads struct {
+						Nodes []struct {
+							ID         string `json:"id"`
+							IsResolved bool   `json:"isResolved"`
+							IsOutdated bool   `json:"isOutdated"`
+							Comments   struct {
+								Nodes []struct {
+									DatabaseID int       `json:"databaseId"`
+									Body       string    `json:"body"`
+									Path       string    `json:"path"`
+									Line       int       `json:"line"`
+									CreatedAt  time.Time `json:"createdAt"`
+									UpdatedAt  time.Time `json:"updatedAt"`
+									URL        string    `json:"url"`
+									Author     struct {
+										Login string `json:"login"`
+									} `json:"author"`
+								} `json:"nodes"`
+							} `json:"comments"`
+						} `json:"nodes"`
+					} `json:"reviewThreads"`
+				} `json:"pullRequest"`
+			} `json:"repository"`
+		} `json:"data"`
 	}
 
-	// Filter for CodeRabbit reviews
-	var codeRabbitReviews []ghReview
-	for _, r := range reviews {
-		if strings.Contains(strings.ToLower(r.User.Login), "coderabbit") {
-			codeRabbitReviews = append(codeRabbitReviews, r)
-		}
+	if err := json.Unmarshal(out, &response); err != nil {
+		return nil, domain.ErrJSONParse("failed to parse GraphQL response", err)
 	}
 
-	if len(codeRabbitReviews) == 0 {
-		return nil, domain.ErrNoComments()
-	}
-
-	// Fetch comments for each CodeRabbit review
 	var allComments []domain.Comment
-	for _, review := range codeRabbitReviews {
-		commentsArgs := []string{
-			"api",
-			fmt.Sprintf("repos/%s/%s/pulls/%d/reviews/%d/comments", owner, repo, number, review.ID),
-		}
-
-		commentsOut, err := c.runGH(ctx, commentsArgs...)
-		if err != nil {
-			continue // Skip this review if we can't fetch comments
-		}
-
-		var comments []ghComment
-		if err := json.Unmarshal(commentsOut, &comments); err != nil {
-			continue
-		}
-
-		for _, comment := range comments {
-			if !strings.Contains(strings.ToLower(comment.User.Login), "coderabbit") {
+	for _, thread := range response.Data.Repository.PullRequest.ReviewThreads.Nodes {
+		for _, comment := range thread.Comments.Nodes {
+			// Only include CodeRabbit comments
+			if !strings.Contains(strings.ToLower(comment.Author.Login), "coderabbit") {
 				continue
 			}
 
-			createdAt, _ := time.Parse(time.RFC3339, comment.CreatedAt)
-			updatedAt, _ := time.Parse(time.RFC3339, comment.UpdatedAt)
-
 			domainComment := domain.Comment{
-				ID:         comment.ID,
+				ID:         comment.DatabaseID,
 				FilePath:   comment.Path,
 				LineNumber: comment.Line,
 				Body:       comment.Body,
 				AIPrompt:   extractAIPrompt(comment.Body),
-				Author:     comment.User.Login,
-				CreatedAt:  createdAt,
-				UpdatedAt:  updatedAt,
-				URL:        comment.HTMLURL,
+				Author:     comment.Author.Login,
+				CreatedAt:  comment.CreatedAt,
+				UpdatedAt:  comment.UpdatedAt,
+				URL:        comment.URL,
 				IsNit:      isNit(comment.Body),
-				IsOutdated: comment.Position == nil,
+				IsOutdated: thread.IsOutdated,
+				IsResolved: thread.IsResolved, // Now properly set from thread!
 			}
 			allComments = append(allComments, domainComment)
 		}
-
-		// Also parse nitpicks and outside-diff comments from the review body
-		nitpicks := parseNitpicksFromReview(review.Body)
-		allComments = append(allComments, nitpicks...)
-
-		outsideDiff := parseOutsideDiffFromReview(review.Body)
-		allComments = append(allComments, outsideDiff...)
 	}
 
-	// Also fetch general PR comments (issue comments)
+	// Also fetch general PR comments (issue comments) - these don't have threads
 	issueCommentsArgs := []string{
 		"api",
 		fmt.Sprintf("repos/%s/%s/issues/%d/comments", owner, repo, number),
@@ -213,6 +231,10 @@ func (c *GitHubCLIClient) ListCodeRabbitComments(ctx context.Context, owner, rep
 				allComments = append(allComments, domainComment)
 			}
 		}
+	}
+
+	if len(allComments) == 0 {
+		return nil, domain.ErrNoComments()
 	}
 
 	return allComments, nil

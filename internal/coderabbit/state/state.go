@@ -227,7 +227,9 @@ func FilterUnprocessed(state *TrackerState, comments []domain.Comment) []domain.
 	var unprocessed []domain.Comment
 
 	for _, comment := range comments {
-		if !IsCommentProcessed(state, comment) || HasCommentChanged(state, comment) {
+		// Only include comments that haven't been processed
+		// Don't reprocess just because timestamp changed - CodeRabbit updates timestamps on re-review
+		if !IsCommentProcessed(state, comment) {
 			unprocessed = append(unprocessed, comment)
 		}
 	}

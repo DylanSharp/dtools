@@ -29,6 +29,8 @@ type Model struct {
 	confirmingExit bool
 	streaming      bool
 	satisfied      bool
+	complete       bool  // Review finished (with or without comments)
+	fetching       bool  // Currently fetching data from GitHub
 
 	// Services
 	reviewService *service.ReviewService
@@ -132,6 +134,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.Update(msg.Review)
 		m.thoughtsChan = msg.Thoughts
 		m.streaming = true
+		m.fetching = false
+		m.complete = false
+
+		// Prepend comments being addressed so user can see them
+		m.thoughts = m.buildCommentSummary(msg.Review)
 
 		// Start reading thoughts
 		return m, m.readThoughtCmd()
@@ -140,6 +147,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.review = msg.Review
 		m.statusBar.Update(msg.Review)
 		m.streaming = false
+		m.fetching = false
+		m.complete = true
 		m.thoughtsChan = nil
 		if msg.Review != nil && msg.Review.Satisfied {
 			m.satisfied = true
@@ -155,10 +164,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case TickMsg:
-		// Update cooldown remaining
+		// Update cooldown/batch wait remaining
 		if m.watcher != nil {
-			remaining := m.watcher.GetCooldownRemaining()
-			m.statusBar.SetWatchState(m.watcher.GetState(), remaining)
+			cooldown := m.watcher.GetCooldownRemaining()
+			batchWait := m.watcher.GetBatchWaitRemaining()
+			m.statusBar.SetWatchState(m.watcher.GetState(), cooldown, batchWait)
 		}
 		return m, tickCmd()
 
@@ -274,7 +284,7 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleWatchEvent handles watch mode events
 func (m *Model) handleWatchEvent(event service.WatchEvent) (tea.Model, tea.Cmd) {
-	m.statusBar.SetWatchState(m.watcher.GetState(), m.watcher.GetCooldownRemaining())
+	m.statusBar.SetWatchState(m.watcher.GetState(), m.watcher.GetCooldownRemaining(), m.watcher.GetBatchWaitRemaining())
 
 	switch event.Type {
 	case service.WatchEventNewComments, service.WatchEventNewCIFailures:
@@ -312,7 +322,10 @@ func (m *Model) handleWatchEvent(event service.WatchEvent) (tea.Model, tea.Cmd) 
 		return m, m.readWatchEventCmd()
 
 	case service.WatchEventPolling, service.WatchEventCooldown:
-		// Just status updates, continue watching
+		// Update last checked time for polling events
+		if event.Type == service.WatchEventPolling {
+			m.statusBar.LastChecked = event.Timestamp
+		}
 		return m, m.readWatchEventCmd()
 	}
 
@@ -344,6 +357,8 @@ func tickCmd() tea.Cmd {
 }
 
 func (m *Model) startReviewCmd() tea.Cmd {
+	m.fetching = true
+	m.complete = false
 	return func() tea.Msg {
 		review, thoughts, err := m.reviewService.StartReview(m.ctx, m.config)
 		if err != nil {
@@ -434,4 +449,64 @@ func (m *Model) IsComplete() bool {
 	}
 	return m.review.Status == domain.ReviewStatusCompleted ||
 		m.review.Status == domain.ReviewStatusSatisfied
+}
+
+// buildCommentSummary creates initial thoughts showing the comments being addressed
+func (m *Model) buildCommentSummary(review *domain.Review) []domain.ThoughtChunk {
+	if review == nil || len(review.Comments) == 0 {
+		return []domain.ThoughtChunk{}
+	}
+
+	now := time.Now()
+	thoughts := []domain.ThoughtChunk{
+		{
+			Timestamp: now,
+			Content:   fmt.Sprintf("─── CodeRabbit Comments (%d) ───", len(review.Comments)),
+			Type:      domain.ThoughtTypeHeader,
+		},
+	}
+
+	for i, comment := range review.Comments {
+		// Build location string
+		location := comment.Location()
+
+		// Format: [1] path/to/file.go:42
+		header := fmt.Sprintf("[%d] %s", i+1, location)
+		thoughts = append(thoughts, domain.ThoughtChunk{
+			Timestamp: now,
+			Content:   header,
+			Type:      domain.ThoughtTypeComment,
+			File:      comment.FilePath,
+		})
+
+		// Show full comment body (word wrapped by renderer)
+		body := comment.EffectiveBody()
+		if body != "" {
+			thoughts = append(thoughts, domain.ThoughtChunk{
+				Timestamp: now,
+				Content:   body,
+				Type:      domain.ThoughtTypeComment,
+				File:      comment.FilePath,
+			})
+		}
+	}
+
+	// Add separator before Claude's response
+	thoughts = append(thoughts, domain.ThoughtChunk{
+		Timestamp: now,
+		Content:   "─── Claude's Analysis ───",
+		Type:      domain.ThoughtTypeHeader,
+	})
+
+	return thoughts
+}
+
+// findNewline returns the index of the first newline, or -1
+func findNewline(s string) int {
+	for i, c := range s {
+		if c == '\n' || c == '\r' {
+			return i
+		}
+	}
+	return -1
 }

@@ -1,54 +1,24 @@
-.PHONY: build install clean test build-review install-review build-ralph install-ralph
+.PHONY: build install clean test deps help
 
-BINARY_NAME=worktree-dev
-REVIEW_BINARY=review
-RALPH_BINARY=ralph
 BUILD_DIR=bin
 INSTALL_DIR=$(HOME)/.local/bin
 
-# Build all binaries
-build: build-worktree build-review build-ralph
-
-# Build worktree-dev binary
-build-worktree:
-	@echo "Building $(BINARY_NAME)..."
+# Build dtools (and dt alias)
+build:
+	@echo "Building dtools..."
 	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/worktree-dev
+	go build -o $(BUILD_DIR)/dtools ./cmd/dtools
+	@ln -sf dtools $(BUILD_DIR)/dt
+	@echo "Built: $(BUILD_DIR)/dtools (also available as $(BUILD_DIR)/dt)"
 
-# Build review binary
-build-review:
-	@echo "Building $(REVIEW_BINARY)..."
-	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(REVIEW_BINARY) ./cmd/review
-
-# Build ralph binary
-build-ralph:
-	@echo "Building $(RALPH_BINARY)..."
-	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(RALPH_BINARY) ./cmd/ralph
-
-# Install all to ~/.local/bin
+# Install to ~/.local/bin
 install: build
 	@echo "Installing to $(INSTALL_DIR)..."
 	@mkdir -p $(INSTALL_DIR)
-	cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
-	cp $(BUILD_DIR)/$(REVIEW_BINARY) $(INSTALL_DIR)/$(REVIEW_BINARY)
-	cp $(BUILD_DIR)/$(RALPH_BINARY) $(INSTALL_DIR)/$(RALPH_BINARY)
-	@echo "Done! Make sure $(INSTALL_DIR) is in your PATH"
-
-# Install just review binary
-install-review: build-review
-	@echo "Installing $(REVIEW_BINARY) to $(INSTALL_DIR)..."
-	@mkdir -p $(INSTALL_DIR)
-	cp $(BUILD_DIR)/$(REVIEW_BINARY) $(INSTALL_DIR)/$(REVIEW_BINARY)
-	@echo "Done!"
-
-# Install just ralph binary
-install-ralph: build-ralph
-	@echo "Installing $(RALPH_BINARY) to $(INSTALL_DIR)..."
-	@mkdir -p $(INSTALL_DIR)
-	cp $(BUILD_DIR)/$(RALPH_BINARY) $(INSTALL_DIR)/$(RALPH_BINARY)
-	@echo "Done!"
+	cp $(BUILD_DIR)/dtools $(INSTALL_DIR)/dtools
+	@ln -sf dtools $(INSTALL_DIR)/dt
+	@echo "Done! Installed: dtools, dt"
+	@echo "Make sure $(INSTALL_DIR) is in your PATH"
 
 # Install dependencies
 deps:
@@ -65,14 +35,22 @@ test:
 
 # Development: build and run
 run: build
-	./$(BUILD_DIR)/$(BINARY_NAME) $(ARGS)
+	./$(BUILD_DIR)/dtools $(ARGS)
 
 # Show help
 help:
-	@echo "Available targets:"
-	@echo "  build   - Build the binary"
+	@echo "dtools - Dylan's DevTools Kit"
+	@echo ""
+	@echo "Build targets:"
+	@echo "  build   - Build dtools binary (and dt symlink)"
 	@echo "  install - Build and install to ~/.local/bin"
 	@echo "  deps    - Download and tidy dependencies"
 	@echo "  clean   - Remove build artifacts"
 	@echo "  test    - Run tests"
-	@echo "  run     - Build and run (use ARGS='create' to pass arguments)"
+	@echo ""
+	@echo "Usage:"
+	@echo "  dtools worktree create <branch>  - Create isolated worktree"
+	@echo "  dtools review [pr-number]        - Review CodeRabbit comments"
+	@echo "  dtools ralph run                 - Execute PRD stories"
+	@echo ""
+	@echo "Alias: dt = dtools (e.g., 'dt review 123')"

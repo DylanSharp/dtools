@@ -42,6 +42,11 @@ type Review struct {
 	RemainingCount  int
 	CurrentFile     string
 
+	// Comment tracking - for UI display
+	TotalFoundCount    int  // Total comments found from GitHub
+	AlreadyAddressed   int  // Comments skipped because already processed
+	NewCommentsCount   int  // New comments to address this run
+
 	// Satisfaction tracking
 	Satisfied       bool
 	LastSatisfyCheck time.Time

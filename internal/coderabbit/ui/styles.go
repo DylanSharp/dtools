@@ -118,6 +118,11 @@ var (
 	FileReferenceStyle = lipgloss.NewStyle().
 		Foreground(Yellow).
 		Italic(true)
+
+	// CommentStyle is for displaying CodeRabbit comments
+	CommentStyle = lipgloss.NewStyle().
+		Foreground(Magenta).
+		PaddingLeft(2)
 )
 
 // Progress bar styles

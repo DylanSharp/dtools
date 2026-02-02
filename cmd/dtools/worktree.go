@@ -2,17 +2,17 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/DylanSharp/dtools/internal/ui"
 	"github.com/DylanSharp/dtools/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "worktree-dev",
-	Short: "Git worktree manager with isolated Docker environments",
-	Long: `worktree-dev creates git worktrees that can run docker-compose independently
+var worktreeCmd = &cobra.Command{
+	Use:     "worktree",
+	Aliases: []string{"wt"},
+	Short:   "Git worktree manager with isolated Docker environments",
+	Long: `worktree creates git worktrees that can run docker-compose independently
 without port conflicts, container name collisions, or shared volumes.
 
 Each worktree gets:
@@ -22,7 +22,7 @@ Each worktree gets:
   - A ./dev helper script for common commands`,
 }
 
-var createCmd = &cobra.Command{
+var worktreeCreateCmd = &cobra.Command{
 	Use:   "create [branch]",
 	Short: "Create a new worktree",
 	Long:  "Create a new worktree. If no branch is specified, interactive mode will guide you.",
@@ -51,7 +51,7 @@ var createCmd = &cobra.Command{
 	},
 }
 
-var listCmd = &cobra.Command{
+var worktreeListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List all worktrees",
@@ -64,7 +64,7 @@ var listCmd = &cobra.Command{
 	},
 }
 
-var removeCmd = &cobra.Command{
+var worktreeRemoveCmd = &cobra.Command{
 	Use:     "remove [branch]",
 	Aliases: []string{"rm"},
 	Short:   "Remove a worktree and cleanup Docker resources",
@@ -83,7 +83,7 @@ var removeCmd = &cobra.Command{
 			// Check if we're inside a worktree
 			branch = repo.CurrentWorktree()
 			if branch == "" {
-				return fmt.Errorf("not inside a worktree. Usage: worktree-dev remove <branch>")
+				return fmt.Errorf("not inside a worktree. Usage: dtools worktree remove <branch>")
 			}
 		}
 
@@ -91,7 +91,7 @@ var removeCmd = &cobra.Command{
 	},
 }
 
-var portsCmd = &cobra.Command{
+var worktreePortsCmd = &cobra.Command{
 	Use:   "ports <branch>",
 	Short: "Show ports that would be allocated for a branch",
 	Args:  cobra.ExactArgs(1),
@@ -105,15 +105,9 @@ var portsCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(createCmd)
-	rootCmd.AddCommand(listCmd)
-	rootCmd.AddCommand(removeCmd)
-	rootCmd.AddCommand(portsCmd)
-}
-
-func main() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	worktreeCmd.AddCommand(worktreeCreateCmd)
+	worktreeCmd.AddCommand(worktreeListCmd)
+	worktreeCmd.AddCommand(worktreeRemoveCmd)
+	worktreeCmd.AddCommand(worktreePortsCmd)
+	rootCmd.AddCommand(worktreeCmd)
 }
