@@ -124,7 +124,8 @@ func (s *ReviewService) StartReview(ctx context.Context, config ReviewConfig) (*
 	review.CIAllComplete = ciStatus.AllComplete()
 
 	// Check if there's anything to review
-	if len(unprocessedComments) == 0 && len(ciStatus.Failures) == 0 {
+	// Only mark satisfied if: no comments, no CI failures, AND all CI checks complete
+	if len(unprocessedComments) == 0 && len(ciStatus.Failures) == 0 && ciStatus.AllComplete() {
 		review.Status = domain.ReviewStatusSatisfied
 		review.MarkSatisfied()
 		return review, nil, nil

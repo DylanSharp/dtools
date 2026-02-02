@@ -149,8 +149,8 @@ func (w *Watcher) checkForChanges(ctx context.Context, prNumber int, events chan
 	newComments := len(review.Comments) > w.lastCommentCount
 	newCommit := review.HeadCommit != w.lastCommitSHA
 
-	// Check if satisfied (no actionable items)
-	if len(review.Comments) == 0 && len(review.CIFailures) == 0 {
+	// Check if satisfied (no actionable items AND all CI complete)
+	if len(review.Comments) == 0 && len(review.CIFailures) == 0 && review.CIAllComplete {
 		// Check CodeRabbit's actual review status
 		satisfaction, _ := w.service.CheckSatisfaction(ctx, review)
 
