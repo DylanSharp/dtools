@@ -11,6 +11,9 @@ type CIProvider interface {
 	// GetTestFailures retrieves failed CI checks for a commit
 	GetTestFailures(ctx context.Context, owner, repo string, commitSHA string) ([]domain.CITestFailure, error)
 
+	// GetCIStatus retrieves the full CI status including pending, passed, and failed checks
+	GetCIStatus(ctx context.Context, owner, repo string, commitSHA string) (domain.CIStatus, error)
+
 	// GetWorkflowRuns retrieves workflow runs for a PR
 	GetWorkflowRuns(ctx context.Context, owner, repo string, prNumber int) ([]WorkflowRun, error)
 }

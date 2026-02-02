@@ -46,6 +46,8 @@ func RenderView(m *Model) string {
 		viewState.AlreadyAddressed = m.review.AlreadyAddressed
 		viewState.NewComments = m.review.NewCommentsCount
 		viewState.CIFailureCount = len(m.review.CIFailures)
+		viewState.CIPendingCount = m.review.CIPendingCount
+		viewState.CIAllComplete = m.review.CIAllComplete
 	}
 
 	content := renderThoughts(m.thoughts, m.width, viewportHeight, m.scrollOffset, viewState)
@@ -97,17 +99,27 @@ type ThoughtViewState struct {
 	AlreadyAddressed int
 	NewComments      int
 	CIFailureCount   int
+	CIPendingCount   int
+	CIAllComplete    bool
 }
 
 // renderThoughts renders the scrollable thoughts area
 func renderThoughts(thoughts []domain.ThoughtChunk, width, height, scrollOffset int, state ThoughtViewState) string {
 	if len(thoughts) == 0 {
 		var message string
-		if state.Satisfied && state.TotalFound == 0 && state.CIFailureCount == 0 {
+		if state.Satisfied && state.TotalFound == 0 && state.CIFailureCount == 0 && state.CIPendingCount == 0 {
+			// All clear: no comments, no CI failures, no pending CI
 			if state.WatchMode {
-				message = "✓ No CodeRabbit comments found\n\nWaiting for new comments..."
+				message = "✓ No CodeRabbit comments found\n✓ All CI checks passed\n\nWaiting for new comments..."
 			} else {
-				message = "✓ No CodeRabbit comments found - PR looks good!"
+				message = "✓ No CodeRabbit comments found\n✓ All CI checks passed\n\nPR looks good!"
+			}
+		} else if state.Satisfied && state.TotalFound == 0 && state.CIFailureCount == 0 && state.CIPendingCount > 0 {
+			// No comments, no failures, but CI still running
+			if state.WatchMode {
+				message = fmt.Sprintf("✓ No CodeRabbit comments found\n◐ %d CI check(s) still running\n\nWaiting for CI to complete...", state.CIPendingCount)
+			} else {
+				message = fmt.Sprintf("✓ No CodeRabbit comments found\n◐ %d CI check(s) still running\n\nWaiting for CI to complete...", state.CIPendingCount)
 			}
 		} else if state.Satisfied && state.CIFailureCount > 0 {
 			// CodeRabbit is satisfied but CI is failing
@@ -116,11 +128,19 @@ func renderThoughts(thoughts []domain.ThoughtChunk, width, height, scrollOffset 
 			} else {
 				message = fmt.Sprintf("✓ CodeRabbit satisfied\n✗ %d CI check(s) failing - fix required", state.CIFailureCount)
 			}
-		} else if state.Complete && state.NewComments == 0 && state.AlreadyAddressed > 0 && state.CIFailureCount == 0 {
+		} else if state.Complete && state.NewComments == 0 && state.AlreadyAddressed > 0 && state.CIFailureCount == 0 && state.CIPendingCount == 0 {
+			// All comments addressed, CI complete and passing
 			if state.WatchMode {
-				message = fmt.Sprintf("✓ All %d comments already addressed\n\nWaiting for new comments...", state.AlreadyAddressed)
+				message = fmt.Sprintf("✓ All %d comments already addressed\n✓ All CI checks passed\n\nWaiting for new comments...", state.AlreadyAddressed)
 			} else {
-				message = fmt.Sprintf("✓ All %d comments already addressed in previous runs", state.AlreadyAddressed)
+				message = fmt.Sprintf("✓ All %d comments already addressed\n✓ All CI checks passed", state.AlreadyAddressed)
+			}
+		} else if state.Complete && state.NewComments == 0 && state.AlreadyAddressed > 0 && state.CIFailureCount == 0 && state.CIPendingCount > 0 {
+			// All comments addressed, but CI still running
+			if state.WatchMode {
+				message = fmt.Sprintf("✓ All %d comments already addressed\n◐ %d CI check(s) still running\n\nWaiting for CI to complete...", state.AlreadyAddressed, state.CIPendingCount)
+			} else {
+				message = fmt.Sprintf("✓ All %d comments already addressed\n◐ %d CI check(s) still running\n\nWaiting for CI to complete...", state.AlreadyAddressed, state.CIPendingCount)
 			}
 		} else if state.Complete && state.NewComments == 0 && state.CIFailureCount > 0 {
 			// No new comments but CI is failing
@@ -129,6 +149,9 @@ func renderThoughts(thoughts []domain.ThoughtChunk, width, height, scrollOffset 
 			} else {
 				message = fmt.Sprintf("✓ No CodeRabbit comments\n✗ %d CI check(s) failing - fix required", state.CIFailureCount)
 			}
+		} else if state.Complete && state.NewComments == 0 && state.CIPendingCount > 0 {
+			// No comments, CI still running
+			message = fmt.Sprintf("✓ No CodeRabbit comments\n◐ %d CI check(s) still running\n\nWaiting for CI to complete...", state.CIPendingCount)
 		} else if state.Streaming && (state.NewComments > 0 || state.CIFailureCount > 0) {
 			var parts []string
 			if state.NewComments > 0 {

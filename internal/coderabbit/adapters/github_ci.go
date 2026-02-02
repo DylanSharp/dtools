@@ -112,6 +112,71 @@ func (a *GitHubCIAdapter) GetTestFailures(ctx context.Context, owner, repo, comm
 	return failures, nil
 }
 
+// GetCIStatus retrieves the full CI status including pending, passed, and failed checks
+func (a *GitHubCIAdapter) GetCIStatus(ctx context.Context, owner, repo, commitSHA string) (domain.CIStatus, error) {
+	args := []string{
+		"api",
+		fmt.Sprintf("repos/%s/%s/commits/%s/check-runs", owner, repo, commitSHA),
+		"--paginate",
+	}
+
+	out, err := a.runGH(ctx, args...)
+	if err != nil {
+		return domain.CIStatus{}, domain.ErrGitHubAPI("failed to fetch check runs", err)
+	}
+
+	var checkRuns ghCheckRuns
+	if err := json.Unmarshal(out, &checkRuns); err != nil {
+		return domain.CIStatus{}, domain.ErrJSONParse("failed to parse check runs", err)
+	}
+
+	status := domain.CIStatus{
+		TotalCount: len(checkRuns.CheckRuns),
+	}
+
+	for _, run := range checkRuns.CheckRuns {
+		switch run.Status {
+		case "completed":
+			if run.Conclusion == "failure" {
+				failure := domain.CITestFailure{
+					CheckName: run.Name,
+					JobName:   run.Name,
+					AppName:   run.App.Name,
+					Summary:   run.Output.Summary,
+					LogURL:    run.HTMLURL,
+				}
+
+				// Fetch annotations if there are any
+				if run.Output.AnnotationsCount > 0 {
+					annotations, err := a.getAnnotations(ctx, owner, repo, run.ID)
+					if err == nil {
+						failure.Annotations = annotations
+					}
+				}
+
+				// If no annotations, try to get the output text
+				if len(failure.Annotations) == 0 && run.Output.Text != "" {
+					text := run.Output.Text
+					if len(text) > 5000 {
+						text = text[:5000] + "\n... [truncated]"
+					}
+					failure.ErrorMessage = text
+				}
+
+				status.Failures = append(status.Failures, failure)
+			} else if run.Conclusion == "success" {
+				status.PassedCount++
+			}
+			// Skip neutral, cancelled, skipped - they don't count as pass or fail
+		case "queued", "in_progress":
+			status.PendingCount++
+			status.PendingNames = append(status.PendingNames, run.Name)
+		}
+	}
+
+	return status, nil
+}
+
 // GetWorkflowRuns retrieves workflow runs for a PR
 func (a *GitHubCIAdapter) GetWorkflowRuns(ctx context.Context, owner, repo string, prNumber int) ([]ports.WorkflowRun, error) {
 	args := []string{

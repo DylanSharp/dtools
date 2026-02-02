@@ -59,6 +59,25 @@ type CITestFailure struct {
 	Annotations  []CIAnnotation
 }
 
+// CIStatus represents the overall status of CI checks
+type CIStatus struct {
+	Failures     []CITestFailure
+	PendingCount int      // Number of checks still running
+	PendingNames []string // Names of pending checks
+	PassedCount  int      // Number of checks that passed
+	TotalCount   int      // Total number of checks
+}
+
+// AllComplete returns true if all checks have completed (no pending)
+func (s CIStatus) AllComplete() bool {
+	return s.PendingCount == 0
+}
+
+// AllPassed returns true if all checks completed successfully
+func (s CIStatus) AllPassed() bool {
+	return s.AllComplete() && len(s.Failures) == 0
+}
+
 // CIAnnotation represents a specific failure annotation
 type CIAnnotation struct {
 	Path       string

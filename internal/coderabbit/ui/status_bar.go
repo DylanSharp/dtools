@@ -31,8 +31,10 @@ type StatusBar struct {
 	AlreadyAddressed int
 	NewComments      int
 
-	// CI failure tracking
+	// CI tracking
 	CIFailureCount int
+	CIPendingCount int
+	CIAllComplete  bool
 }
 
 // NewStatusBar creates a new status bar with default values
@@ -82,10 +84,14 @@ func (s StatusBar) Render(width int) string {
 		sections = append(sections, progressSection)
 	}
 
-	// CI failure info
+	// CI status info
 	if s.CIFailureCount > 0 {
 		ciInfo := fmt.Sprintf("CI: %d failed", s.CIFailureCount)
 		ciSection := StatusBarErrorStyle.Render(ciInfo)
+		sections = append(sections, ciSection)
+	} else if s.CIPendingCount > 0 {
+		ciInfo := fmt.Sprintf("CI: %d running", s.CIPendingCount)
+		ciSection := StatusBarWarningStyle.Render(ciInfo)
 		sections = append(sections, ciSection)
 	}
 
@@ -156,6 +162,9 @@ func (s StatusBar) renderStatus() string {
 			if s.CIFailureCount > 0 {
 				return StatusBarWarningStyle.Render("◐ CI Failing")
 			}
+			if s.CIPendingCount > 0 {
+				return StatusBarWarningStyle.Render("◐ CI Running")
+			}
 			return StatusBarProgressStyle.Render("✓ Satisfied")
 		case service.WatchStateError:
 			return StatusBarErrorStyle.Render("● Error")
@@ -174,10 +183,16 @@ func (s StatusBar) renderStatus() string {
 		if s.CIFailureCount > 0 {
 			return StatusBarWarningStyle.Render("◐ CI Failing")
 		}
+		if s.CIPendingCount > 0 {
+			return StatusBarWarningStyle.Render("◐ CI Running")
+		}
 		return StatusBarProgressStyle.Render("✓ Complete")
 	case domain.ReviewStatusSatisfied:
 		if s.CIFailureCount > 0 {
 			return StatusBarWarningStyle.Render("◐ CI Failing")
+		}
+		if s.CIPendingCount > 0 {
+			return StatusBarWarningStyle.Render("◐ CI Running")
 		}
 		return StatusBarProgressStyle.Render("✓ Satisfied")
 	case domain.ReviewStatusFailed:
@@ -207,8 +222,10 @@ func (s *StatusBar) Update(review *domain.Review) {
 	s.AlreadyAddressed = review.AlreadyAddressed
 	s.NewComments = review.NewCommentsCount
 
-	// CI failure tracking
+	// CI tracking
 	s.CIFailureCount = len(review.CIFailures)
+	s.CIPendingCount = review.CIPendingCount
+	s.CIAllComplete = review.CIAllComplete
 }
 
 // SetWatchState updates the watch mode state

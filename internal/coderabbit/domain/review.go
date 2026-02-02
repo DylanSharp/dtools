@@ -37,6 +37,11 @@ type Review struct {
 	CIFailures []CITestFailure
 	Thoughts   []ThoughtChunk
 
+	// CI status tracking
+	CIPendingCount int      // Number of CI checks still running
+	CIPendingNames []string // Names of pending CI checks
+	CIAllComplete  bool     // True if all CI checks have finished
+
 	// Processing state
 	ProcessedCount  int
 	RemainingCount  int

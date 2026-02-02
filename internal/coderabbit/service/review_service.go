@@ -112,16 +112,19 @@ func (s *ReviewService) StartReview(ctx context.Context, config ReviewConfig) (*
 	review.NewCommentsCount = len(unprocessedComments)
 	review.AlreadyAddressed = review.TotalFoundCount - review.NewCommentsCount
 
-	// Fetch CI failures
-	ciFailures, err := s.ci.GetTestFailures(ctx, owner, repo, pr.HeadCommit)
+	// Fetch CI status (includes failures and pending checks)
+	ciStatus, err := s.ci.GetCIStatus(ctx, owner, repo, pr.HeadCommit)
 	if err != nil {
-		// CI failures are optional - log but continue
-		ciFailures = []domain.CITestFailure{}
+		// CI status is optional - log but continue with empty status
+		ciStatus = domain.CIStatus{}
 	}
-	review.CIFailures = ciFailures
+	review.CIFailures = ciStatus.Failures
+	review.CIPendingCount = ciStatus.PendingCount
+	review.CIPendingNames = ciStatus.PendingNames
+	review.CIAllComplete = ciStatus.AllComplete()
 
 	// Check if there's anything to review
-	if len(unprocessedComments) == 0 && len(ciFailures) == 0 {
+	if len(unprocessedComments) == 0 && len(ciStatus.Failures) == 0 {
 		review.Status = domain.ReviewStatusSatisfied
 		review.MarkSatisfied()
 		return review, nil, nil
@@ -244,10 +247,13 @@ func (s *ReviewService) FetchReviewData(ctx context.Context, config ReviewConfig
 	review.NewCommentsCount = len(review.Comments)
 	review.AlreadyAddressed = review.TotalFoundCount - review.NewCommentsCount
 
-	// Fetch CI failures
-	ciFailures, err := s.ci.GetTestFailures(ctx, owner, repo, pr.HeadCommit)
+	// Fetch CI status
+	ciStatus, err := s.ci.GetCIStatus(ctx, owner, repo, pr.HeadCommit)
 	if err == nil {
-		review.CIFailures = ciFailures
+		review.CIFailures = ciStatus.Failures
+		review.CIPendingCount = ciStatus.PendingCount
+		review.CIPendingNames = ciStatus.PendingNames
+		review.CIAllComplete = ciStatus.AllComplete()
 	}
 
 	return review, nil
