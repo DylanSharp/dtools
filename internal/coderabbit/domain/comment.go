@@ -61,11 +61,13 @@ type CITestFailure struct {
 
 // CIStatus represents the overall status of CI checks
 type CIStatus struct {
-	Failures     []CITestFailure
-	PendingCount int      // Number of checks still running
-	PendingNames []string // Names of pending checks
-	PassedCount  int      // Number of checks that passed
-	TotalCount   int      // Total number of checks
+	Failures            []CITestFailure
+	PendingCount        int      // Number of checks still running
+	PendingNames        []string // Names of pending checks
+	PassedCount         int      // Number of checks that passed
+	TotalCount          int      // Total number of checks
+	CodeRabbitFound     bool     // True if CodeRabbit check run exists
+	CodeRabbitCompleted bool     // True if CodeRabbit check run is completed
 }
 
 // AllComplete returns true if all checks have completed (no pending)

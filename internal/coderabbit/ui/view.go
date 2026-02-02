@@ -48,13 +48,8 @@ func RenderView(m *Model) string {
 		viewState.CIFailureCount = len(m.review.CIFailures)
 		viewState.CIPendingCount = m.review.CIPendingCount
 		viewState.CIAllComplete = m.review.CIAllComplete
-		// Check if CodeRabbit is one of the pending CI checks
-		for _, name := range m.review.CIPendingNames {
-			if strings.Contains(strings.ToLower(name), "coderabbit") {
-				viewState.CodeRabbitPending = true
-				break
-			}
-		}
+		viewState.CodeRabbitFound = m.review.CodeRabbitFound
+		viewState.CodeRabbitCompleted = m.review.CodeRabbitCompleted
 	}
 
 	content := renderThoughts(m.thoughts, m.width, viewportHeight, m.scrollOffset, viewState)
@@ -97,37 +92,42 @@ func renderHeader(m *Model) string {
 
 // ThoughtViewState holds the state needed for rendering thoughts
 type ThoughtViewState struct {
-	Streaming          bool
-	Fetching           bool
-	Complete           bool
-	Satisfied          bool
-	WatchMode          bool
-	TotalFound         int
-	AlreadyAddressed   int
-	NewComments        int
-	CIFailureCount     int
-	CIPendingCount     int
-	CIAllComplete      bool
-	CodeRabbitPending  bool // True if CodeRabbit review check is still running
+	Streaming           bool
+	Fetching            bool
+	Complete            bool
+	Satisfied           bool
+	WatchMode           bool
+	TotalFound          int
+	AlreadyAddressed    int
+	NewComments         int
+	CIFailureCount      int
+	CIPendingCount      int
+	CIAllComplete       bool
+	CodeRabbitFound     bool // True if CodeRabbit check run exists
+	CodeRabbitCompleted bool // True if CodeRabbit check run has completed
 }
 
 // renderThoughts renders the scrollable thoughts area
 func renderThoughts(thoughts []domain.ThoughtChunk, width, height, scrollOffset int, state ThoughtViewState) string {
 	if len(thoughts) == 0 {
 		var message string
-		if state.Satisfied && state.TotalFound == 0 && state.CIFailureCount == 0 && state.CIPendingCount == 0 {
-			// All clear: no comments, no CI failures, no pending CI
+		// First, check CodeRabbit status - this takes priority
+		if !state.CodeRabbitFound {
+			// CodeRabbit hasn't even started yet
+			message = "◐ Waiting for CodeRabbit to start review...\n\nCodeRabbit check not found yet."
+		} else if state.CodeRabbitFound && !state.CodeRabbitCompleted {
+			// CodeRabbit is actively reviewing
+			message = "◐ CodeRabbit is reviewing the PR...\n\nWaiting for CodeRabbit to finish..."
+		} else if state.Satisfied && state.TotalFound == 0 && state.CIFailureCount == 0 && state.CIPendingCount == 0 {
+			// All clear: CodeRabbit reviewed, no comments, no CI failures, no pending CI
 			if state.WatchMode {
 				message = "✓ No CodeRabbit comments found\n✓ All CI checks passed\n\nWaiting for new comments..."
 			} else {
 				message = "✓ No CodeRabbit comments found\n✓ All CI checks passed\n\nPR looks good!"
 			}
-		} else if state.CIPendingCount > 0 && state.CIFailureCount == 0 && state.CodeRabbitPending {
-			// CodeRabbit is still reviewing - be specific about this
-			message = "◐ CodeRabbit is reviewing the PR...\n\nWaiting for CodeRabbit to finish..."
 		} else if state.CIPendingCount > 0 && state.CIFailureCount == 0 {
-			// Other CI checks still running (not CodeRabbit)
-			message = fmt.Sprintf("◐ %d CI check(s) still running\n\nWaiting for CI to complete...", state.CIPendingCount)
+			// Other CI checks still running (CodeRabbit done, but other checks pending)
+			message = fmt.Sprintf("✓ CodeRabbit review complete\n◐ %d CI check(s) still running\n\nWaiting for CI to complete...", state.CIPendingCount)
 		} else if state.Satisfied && state.CIFailureCount > 0 {
 			// CodeRabbit is satisfied but CI is failing
 			if state.WatchMode {

@@ -38,9 +38,11 @@ type Review struct {
 	Thoughts   []ThoughtChunk
 
 	// CI status tracking
-	CIPendingCount int      // Number of CI checks still running
-	CIPendingNames []string // Names of pending CI checks
-	CIAllComplete  bool     // True if all CI checks have finished
+	CIPendingCount      int      // Number of CI checks still running
+	CIPendingNames      []string // Names of pending CI checks
+	CIAllComplete       bool     // True if all CI checks have finished
+	CodeRabbitFound     bool     // True if CodeRabbit check run exists
+	CodeRabbitCompleted bool     // True if CodeRabbit check run has completed
 
 	// Processing state
 	ProcessedCount  int

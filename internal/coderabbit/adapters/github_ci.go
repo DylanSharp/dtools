@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/DylanSharp/dtools/internal/coderabbit/domain"
 	"github.com/DylanSharp/dtools/internal/coderabbit/ports"
@@ -135,8 +136,20 @@ func (a *GitHubCIAdapter) GetCIStatus(ctx context.Context, owner, repo, commitSH
 	}
 
 	for _, run := range checkRuns.CheckRuns {
+		// Check if this is a CodeRabbit check
+		isCodeRabbit := strings.Contains(strings.ToLower(run.Name), "coderabbit") ||
+			strings.Contains(strings.ToLower(run.App.Name), "coderabbit") ||
+			strings.Contains(strings.ToLower(run.App.Slug), "coderabbit")
+
+		if isCodeRabbit {
+			status.CodeRabbitFound = true
+		}
+
 		switch run.Status {
 		case "completed":
+			if isCodeRabbit {
+				status.CodeRabbitCompleted = true
+			}
 			if run.Conclusion == "failure" {
 				failure := domain.CITestFailure{
 					CheckName: run.Name,

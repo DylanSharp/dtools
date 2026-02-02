@@ -122,10 +122,15 @@ func (s *ReviewService) StartReview(ctx context.Context, config ReviewConfig) (*
 	review.CIPendingCount = ciStatus.PendingCount
 	review.CIPendingNames = ciStatus.PendingNames
 	review.CIAllComplete = ciStatus.AllComplete()
+	review.CodeRabbitFound = ciStatus.CodeRabbitFound
+	review.CodeRabbitCompleted = ciStatus.CodeRabbitCompleted
 
 	// Check if there's anything to review
-	// Only mark satisfied if: no comments, no CI failures, AND all CI checks complete
-	if len(unprocessedComments) == 0 && len(ciStatus.Failures) == 0 && ciStatus.AllComplete() {
+	// Only mark satisfied if:
+	// - No comments AND no CI failures AND all CI checks complete
+	// - AND CodeRabbit has actually reviewed (found and completed)
+	codeRabbitReviewed := ciStatus.CodeRabbitFound && ciStatus.CodeRabbitCompleted
+	if len(unprocessedComments) == 0 && len(ciStatus.Failures) == 0 && ciStatus.AllComplete() && codeRabbitReviewed {
 		review.Status = domain.ReviewStatusSatisfied
 		review.MarkSatisfied()
 		return review, nil, nil
