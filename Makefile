@@ -1,21 +1,39 @@
-.PHONY: build install clean test
+.PHONY: build install clean test build-review install-review
 
 BINARY_NAME=worktree-dev
+REVIEW_BINARY=review
 BUILD_DIR=bin
 INSTALL_DIR=$(HOME)/.local/bin
 
-# Build the binary
-build:
+# Build all binaries
+build: build-worktree build-review
+
+# Build worktree-dev binary
+build-worktree:
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/worktree-dev
 
-# Install to ~/.local/bin
+# Build review binary
+build-review:
+	@echo "Building $(REVIEW_BINARY)..."
+	@mkdir -p $(BUILD_DIR)
+	go build -o $(BUILD_DIR)/$(REVIEW_BINARY) ./cmd/review
+
+# Install all to ~/.local/bin
 install: build
 	@echo "Installing to $(INSTALL_DIR)..."
 	@mkdir -p $(INSTALL_DIR)
 	cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
+	cp $(BUILD_DIR)/$(REVIEW_BINARY) $(INSTALL_DIR)/$(REVIEW_BINARY)
 	@echo "Done! Make sure $(INSTALL_DIR) is in your PATH"
+
+# Install just review binary
+install-review: build-review
+	@echo "Installing $(REVIEW_BINARY) to $(INSTALL_DIR)..."
+	@mkdir -p $(INSTALL_DIR)
+	cp $(BUILD_DIR)/$(REVIEW_BINARY) $(INSTALL_DIR)/$(REVIEW_BINARY)
+	@echo "Done!"
 
 # Install dependencies
 deps:

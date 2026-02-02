@@ -1,8 +1,9 @@
-module github.com/dylan/worktree-dev
+module github.com/DylanSharp/dtools
 
 go 1.21
 
 require (
+	github.com/charmbracelet/bubbletea v1.1.0
 	github.com/charmbracelet/huh v0.6.0
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/spf13/cobra v1.8.1
@@ -13,7 +14,6 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/catppuccin/go v0.2.0 // indirect
 	github.com/charmbracelet/bubbles v0.20.0 // indirect
-	github.com/charmbracelet/bubbletea v1.1.0 // indirect
 	github.com/charmbracelet/x/ansi v0.4.2 // indirect
 	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
 	github.com/charmbracelet/x/term v0.2.0 // indirect

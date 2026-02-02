@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dylan/worktree-dev/internal/ui"
-	"github.com/dylan/worktree-dev/internal/worktree"
+	"github.com/DylanSharp/dtools/internal/ui"
+	"github.com/DylanSharp/dtools/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
