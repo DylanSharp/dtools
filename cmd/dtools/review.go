@@ -52,7 +52,7 @@ automatically triggering Claude reviews until CodeRabbit is satisfied.`,
 
 func init() {
 	reviewCmd.Flags().IntVarP(&reviewPRNumber, "pr", "p", 0, "PR number (auto-detected if not specified)")
-	reviewCmd.Flags().BoolVarP(&reviewWatchMode, "watch", "w", false, "Enable watch mode for continuous review")
+	reviewCmd.Flags().BoolVarP(&reviewWatchMode, "watch", "w", true, "Enable watch mode for continuous review (use --watch=false for single run)")
 	reviewCmd.Flags().BoolVar(&reviewIncludeNits, "include-nits", true, "Include nitpick comments")
 	reviewCmd.Flags().BoolVar(&reviewIncludeOutdated, "include-outdated", true, "Include outdated comments")
 	reviewCmd.Flags().IntVar(&reviewPollInterval, "poll-interval", 15, "Watch mode poll interval in seconds")
