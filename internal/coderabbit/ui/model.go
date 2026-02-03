@@ -183,7 +183,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.watcher != nil {
 			m.watcher.RejectSatisfied()
 		}
-		return m, nil
+		// Resume reading watch events after rejection
+		return m, m.readWatchEventCmd()
 	}
 
 	return m, nil

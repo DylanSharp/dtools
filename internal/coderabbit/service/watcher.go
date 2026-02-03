@@ -100,13 +100,24 @@ func (w *Watcher) Start(ctx context.Context, prNumber int) <-chan WatchEvent {
 
 // checkForChanges polls for new comments or CI failures
 func (w *Watcher) checkForChanges(ctx context.Context, prNumber int, events chan<- WatchEvent) {
-	// Check if we're in cooldown (thread-safe read)
+	// Check current state (thread-safe read)
 	w.mu.Lock()
-	inCooldown := w.state == WatchStateCooldown
+	currentState := w.state
 	cooldownUntil := w.cooldownUntil
 	w.mu.Unlock()
 
-	if inCooldown && time.Now().Before(cooldownUntil) {
+	// Skip if we're already processing a review
+	if currentState == WatchStateProcessing {
+		events <- WatchEvent{
+			Type:      WatchEventPolling,
+			Timestamp: time.Now(),
+			Message:   "Review in progress, waiting...",
+		}
+		return
+	}
+
+	// Check if we're in cooldown
+	if currentState == WatchStateCooldown && time.Now().Before(cooldownUntil) {
 		events <- WatchEvent{
 			Type:      WatchEventCooldown,
 			Timestamp: time.Now(),
@@ -116,7 +127,7 @@ func (w *Watcher) checkForChanges(ctx context.Context, prNumber int, events chan
 	}
 
 	// Exit cooldown if expired (thread-safe write)
-	if inCooldown && time.Now().After(cooldownUntil) {
+	if currentState == WatchStateCooldown && time.Now().After(cooldownUntil) {
 		w.mu.Lock()
 		w.state = WatchStatePolling
 		w.mu.Unlock()
@@ -293,6 +304,11 @@ func (w *Watcher) checkForChanges(ctx context.Context, prNumber int, events chan
 
 	// Wait for review to complete in background
 	go func() {
+		// Handle nil thoughts channel (review already satisfied)
+		if thoughts == nil {
+			goto done
+		}
+
 		// Drain the thoughts channel (context-aware)
 		for {
 			select {

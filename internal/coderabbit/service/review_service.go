@@ -260,6 +260,8 @@ func (s *ReviewService) FetchReviewData(ctx context.Context, config ReviewConfig
 		review.CIPendingCount = ciStatus.PendingCount
 		review.CIPendingNames = ciStatus.PendingNames
 		review.CIAllComplete = ciStatus.AllComplete()
+		review.CodeRabbitFound = ciStatus.CodeRabbitFound
+		review.CodeRabbitCompleted = ciStatus.CodeRabbitCompleted
 	}
 
 	return review, nil

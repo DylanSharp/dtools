@@ -113,8 +113,20 @@ func (a *GitHubCIAdapter) GetTestFailures(ctx context.Context, owner, repo, comm
 	return failures, nil
 }
 
+// ghCommitStatus represents the combined status from the Status API
+type ghCommitStatus struct {
+	State    string `json:"state"` // pending, success, failure, error
+	Statuses []struct {
+		Context     string `json:"context"`
+		State       string `json:"state"`
+		Description string `json:"description"`
+		TargetURL   string `json:"target_url"`
+	} `json:"statuses"`
+}
+
 // GetCIStatus retrieves the full CI status including pending, passed, and failed checks
 func (a *GitHubCIAdapter) GetCIStatus(ctx context.Context, owner, repo, commitSHA string) (domain.CIStatus, error) {
+	// First, check the Check Runs API (GitHub Actions, GitHub Apps)
 	args := []string{
 		"api",
 		fmt.Sprintf("repos/%s/%s/commits/%s/check-runs", owner, repo, commitSHA),
@@ -184,6 +196,47 @@ func (a *GitHubCIAdapter) GetCIStatus(ctx context.Context, owner, repo, commitSH
 		case "queued", "in_progress":
 			status.PendingCount++
 			status.PendingNames = append(status.PendingNames, run.Name)
+		}
+	}
+
+	// Also check the Commit Status API (for integrations like CodeRabbit that use statuses instead of checks)
+	// This is separate from Check Runs - some integrations use one or the other
+	statusArgs := []string{
+		"api",
+		fmt.Sprintf("repos/%s/%s/commits/%s/status", owner, repo, commitSHA),
+	}
+
+	statusOut, err := a.runGH(ctx, statusArgs...)
+	if err == nil {
+		var commitStatus ghCommitStatus
+		if json.Unmarshal(statusOut, &commitStatus) == nil {
+			for _, s := range commitStatus.Statuses {
+				isCodeRabbit := strings.Contains(strings.ToLower(s.Context), "coderabbit")
+
+				if isCodeRabbit {
+					status.CodeRabbitFound = true
+					// Check the state of the CodeRabbit status
+					// Note: if CodeRabbit was already found in check-runs, this will override
+					// (Status API is more authoritative for CodeRabbit since that's what it uses)
+					switch s.State {
+					case "success":
+						status.CodeRabbitCompleted = true
+					case "pending":
+						// CodeRabbit is still running - NOT completed
+						// This is the key fix: ensure we don't show "PR looks good" when CodeRabbit is pending
+						status.CodeRabbitCompleted = false
+						status.PendingCount++
+						status.PendingNames = append(status.PendingNames, s.Context)
+					case "failure", "error":
+						status.CodeRabbitCompleted = true
+						status.Failures = append(status.Failures, domain.CITestFailure{
+							CheckName: s.Context,
+							Summary:   s.Description,
+							LogURL:    s.TargetURL,
+						})
+					}
+				}
+			}
 		}
 	}
 
